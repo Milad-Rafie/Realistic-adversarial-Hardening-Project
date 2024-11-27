@@ -1,1 +1,27 @@
+# the requirements file that you need actually to follow in order to run this experiments:
+
+# for the attack.py
+
+create to a virtual environment:
+python3 -m venv myenv
+
+then activiate the enviroment:
+source myenv/bin/activate
+
+
+then upgrade the pip to install the needed modules if necessatry: 
+python3 -m pip install --upgrade pip
+
+1- install joblib:
+python3 -m pip install joblib
+
+2- install numpy:
+python3 -m pip install numpy
+
+3- install tensorflow:
+python3 -m pip install tensorflow
+
+4- install art:
+python3 -m pip install adversarial-robustness-toolbox
+python3 -c "import art; print('Adversarial Robustness Toolbox is installed')"
 
