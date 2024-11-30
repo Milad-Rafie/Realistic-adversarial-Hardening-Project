@@ -20,12 +20,12 @@ class Neris_attack():
     def __init__(self, model_path,  iterations, distance, scaler, mins, maxs):
 
         #features that can be updated
-        self.UPDATE = np.load("../data/mod_features.npy")
+        self.UPDATE = np.load("/Users/milo/Downloads/realistic_adversarial_hardening-main/data/mod_features.npy")
 
         #Families: Total bytes - Min bytes - Max bytes - Total duration- Min duration - Max duration - Total packets - Min packets - Max packets
-        self.FAMILIES = np.load("../data/families.npy")
+        self.FAMILIES = np.load("/Users/milo/Downloads/realistic_adversarial_hardening-main/data/families.npy")
         #Integer features
-        self.integers = np.load("../data/int_features.npy")
+        self.integers = np.load("/Users/milo/Downloads/realistic_adversarial_hardening-main/data/mod_features.npyint_features.npy")
         #Number of attack iterations
         self.NUM_ITERATIONS = iterations
         self.distance = distance

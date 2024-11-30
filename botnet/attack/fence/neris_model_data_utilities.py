@@ -14,15 +14,24 @@ warnings.filterwarnings('ignore')
 np.set_printoptions(precision = 5)
 
         
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+
 class MDModel:
     def __init__(self, restore):
         network = Sequential()
-        network.add(tf.keras.Input(shape=(756)))
-        network.add(Dense(units = 256, activation = 'relu', input_dim = 756))
-        network.add(Dense(units = 128, activation = 'relu'))
-        network.add(Dense(units = 64, activation = 'relu'))
-        network.add(Dense(units = 1)) 
-        
+        network.add(tf.keras.Input(shape=(756,)))  # Input layer
+        network.add(Dense(units=256, activation='relu'))
+        network.add(Dense(units=128, activation='relu'))
+        network.add(Dense(units=64, activation='relu'))
+        network.add(Dense(units=2, activation='softmax'))  # Fix: Output layer matches the saved weights shape (64, 2)
+
+        # Load the model weights
         network.load_weights(restore)
         self.model = network
 
