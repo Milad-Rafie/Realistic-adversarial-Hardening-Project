@@ -2,7 +2,7 @@ import sys
 sys.path.append('..')
 
 import numpy as np
-from attack.fence.neris_attack_tf2_modified import Neris_attack
+from attack.fence.neris_attack_tf2 import Neris_attack
 from attack.pgd.pgd_attack_art import PgdRandomRestart
 
 def generate_adversarial_batch_fence(model, total, samples, labels,  distance, iterations, scaler, mins, maxs, model_path):
