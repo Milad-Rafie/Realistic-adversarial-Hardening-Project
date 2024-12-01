@@ -1,4 +1,4 @@
-# this repositroy is a working repository of my AI and cybersecurity project at the university of luxembourg, while the oroginal repository is focusing on Botnet detection and malware, our project is limited only to Botenet detection.
+# this repositroy is a working repository of my AI and cybersecurity project at the university of luxembourg, while the oroginal repository is focusing on Botnet detection and malware, our project is limited only to Botenet detection for PGD attack and fence.
 
 # Realistic adversarial hardening
 This repository contains the data and the code used for S&amp;P 2023 paper <em>[On The Empirical Effectiveness of Unrealistic Adversarial Hardening Against Realistic Adversarial Attacks](https://arxiv.org/abs/2202.03277)</em>. 
