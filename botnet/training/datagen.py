@@ -54,9 +54,7 @@ def generate_adversarial_batch_fence(model, total, samples, labels, distance, it
         
 
 def generate_adversarial_batch_pgd(model, total, samples, labels, distance, iterations, scaler, mins, maxs, mutable_idx, eq_min_max_idx):
-    """
-    Generates adversarial examples using the PGD attack.
-    """
+   
     attack_generator = PgdRandomRestart(
         model=model,
         eps=distance,
