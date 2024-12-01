@@ -10,9 +10,7 @@ from tensorflow.keras.losses import CategoricalCrossentropy
 from sklearn.metrics import f1_score, confusion_matrix, roc_auc_score
 
 def create_DNN(units, input_dim_param, lr_param):
-    """
-    Creates a Deep Neural Network (DNN) model.
-    """
+   
     network = Sequential()
     network.add(Input(shape=(input_dim_param,)))
     network.add(Dense(units=units[0], activation='relu'))
@@ -29,9 +27,7 @@ def create_DNN(units, input_dim_param, lr_param):
     return network
 
 def save_metrics(y_test_array, predictions, metrics_path):
-    """
-    Saves evaluation metrics to a file.
-    """
+    
     f1 = f1_score(np.argmax(y_test_array, axis=1), predictions)
     roc_auc = roc_auc_score(np.argmax(y_test_array, axis=1), predictions)
     tn, fp, fn, tp = confusion_matrix(np.argmax(y_test_array, axis=1), predictions).ravel()
@@ -45,17 +41,13 @@ def save_metrics(y_test_array, predictions, metrics_path):
         pickle.dump(metrics_obj, f)
 
 def save_adv_candidates(x_test_array, y_test_array, predictions, adv_candidates_path):
-    """
-    Saves adversarial examples for further analysis.
-    """
+    
     idx = np.argwhere((predictions != np.argmax(y_test_array, axis=1)) & (np.argmax(y_test_array, axis=1) == 1))
     idx = np.squeeze(idx)
     np.save(adv_candidates_path, x_test_array[idx])
 
 def read_min_max(min_file, max_file):
-    """
-    Reads min and max feature values from files.
-    """
+   
     try:
         with open(min_file, "r") as f:
             mins = list(map(float, f.read().strip().split(",")))
@@ -67,9 +59,7 @@ def read_min_max(min_file, max_file):
         raise
 
 def get_train_data(config):
-    """
-    Loads training and testing data from the paths specified in the configuration.
-    """
+    
     try:
         x_train = np.load(config["x_train"])
         y_train = np.load(config["y_train"])
@@ -83,15 +73,10 @@ def get_train_data(config):
         raise
 
 def get_model_data(config):
-    """
-    Extracts model configuration data.
-    """
     return config["LAYERS"], config["INPUT_DIM"], config["LR"]
 
 def get_processing_data(config):
-    """
-    Loads scaler and feature limits.
-    """
+    
     try:
         scaler = joblib.load(config["scaler_path"])
         min_features, max_features = read_min_max(config["min_features"], config["max_features"])
@@ -101,9 +86,7 @@ def get_processing_data(config):
         raise
 
 def save_model_and_history(config, model, history_obj, method):
-    """
-    Saves the trained model in multiple formats and training history.
-    """
+   
     path_to_save = config["path_to_save"]
 
     # Save the model in .keras format
