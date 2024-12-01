@@ -4,7 +4,7 @@ from art.attacks.evasion import ProjectedGradientDescent as PGD
 from art.estimators.classification.tensorflow import TensorFlowV2Classifier as kc
 
 class PgdRandomRestart:
-    def __init__(self, model, eps, alpha, num_iter, restarts, scaler, mins, maxs, mask_idx, eq_min_max):
+    def __init__(self, model, eps, alpha, num_iter, restarts, scaler, mins, maxs, mutable_idx, eq_min_max_idx):
         self.model = model
         self.eps = eps
         self.alpha = alpha
@@ -13,8 +13,9 @@ class PgdRandomRestart:
         self.scaler = scaler
         self.clip_min = self.scaler.transform(np.array(mins).reshape(1, -1))
         self.clip_max = self.scaler.transform(np.array(maxs).reshape(1, -1))
-        self.clip_max[0][eq_min_max] += 1e-9
-        self.mask_idx = mask_idx
+        self.clip_max[0][eq_min_max_idx] += 1e-9
+        self.mutable_idx = mutable_idx
+        self.eq_min_max_idx = eq_min_max_idx
 
     def run_attack(self, clean_samples, true_labels):
         print(f"[DEBUG] clean_samples shape: {clean_samples.shape}")
