@@ -19,7 +19,7 @@ def load_mutable_idx(config):
     return mutable_idx
 
 def load_eq_min_max_idx():
-    eq_min_max_idx = "/Users/milo/Downloads/realistic_adversarial_hardening-main/data/neris/eq_min_max_idx.npy"
+    eq_min_max_idx = "../data/neris/eq_min_max_idx.npy"
     if not os.path.exists(eq_min_max_idx):
         raise FileNotFoundError(f"The file 'eq_min_max_idx.npy' does not exist at {eq_min_max_idx}. Please check the path.")
 
@@ -46,10 +46,6 @@ def train(config, method="clean", distance=12, save_data=True):
     for lrate in LR:
         model = create_DNN(units=LAYERS, input_dim_param=INPUT_DIM, lr_param=lrate)
         print(f"[INFO] Training model with learning rate: {lrate}...")
-
-        # if method == "clean":
-        #     print(f"[INFO] Training clean model...")
-        #     history_obj = model.fit(x_train, y_train, verbose=1, epochs=epochs, batch_size=batch_size, shuffle=True)
 
         if method == "pgd":
             print("[INFO] Generating PGD adversarial examples...")
@@ -99,7 +95,7 @@ def train(config, method="clean", distance=12, save_data=True):
             save_model_and_history(config, model, history_obj, method)
 
 if __name__ == "__main__":
-    config_file = "config/neris.json"
+    config_file = "../training/config/neris.json"
     with open(config_file, "r") as f:
         config = json.load(f)
 
