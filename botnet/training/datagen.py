@@ -7,10 +7,11 @@ from attack.pgd.pgd_attack_art import PgdRandomRestart
 
 
 def generate_adversarial_batch_fence(model, total, samples, labels, distance, iterations, scaler, mins, maxs, model_path):
-
     while True:
+        # Save model
         model.save(model_path)
 
+        # Initialize the attack generator
         attack_generator = Neris_attack(
             model_path=model_path, iterations=iterations, distance=distance, scaler=scaler, mins=mins, maxs=maxs
         )
@@ -21,17 +22,23 @@ def generate_adversarial_batch_fence(model, total, samples, labels, distance, it
 
         for i in idxs:
             sample = samples[i]
-            sample = np.expand_dims(sample, axis=0)
+            sample = np.expand_dims(sample, axis=0)  # Ensure the shape is correct
             label = labels[i]
+
             # Generate an adversarial sample
             adversary = attack_generator.run_attack(sample, label)
 
-            # Check if adversary is valid before appending
-            if adversary is not None and adversary.size > 0:  # Ensure adversary is not empty
+            # Debug output for adversary
+            print(f"[DEBUG] Adversary output: {adversary}")
+
+            # Validate adversarial sample
+            if adversary is not None and isinstance(adversary, np.ndarray) and adversary.size > 0:
                 perturbSamples.append(adversary)
                 perturbLabels.append(label)
+            else:
+                print(f"[DEBUG] Invalid adversary for index {i}. Skipping...")
 
-        # Ensure perturbSamples and perturbLabels are not empty
+        # Check if the batch has valid data
         if len(perturbSamples) == 0 or len(perturbLabels) == 0:
             print("[ERROR] No adversarial samples generated. Skipping this batch.")
             continue
@@ -39,12 +46,12 @@ def generate_adversarial_batch_fence(model, total, samples, labels, distance, it
         perturbSamples = np.array(perturbSamples)
         perturbLabels = np.array(perturbLabels)
 
-        # Debugging shapes
+        # Debug shapes
         print(f"[DEBUG] PerturbSamples shape: {perturbSamples.shape}")
         print(f"[DEBUG] PerturbLabels shape: {perturbLabels.shape}")
 
         yield perturbSamples, tf.keras.utils.to_categorical(perturbLabels, num_classes=2)
-
+        
 
 def generate_adversarial_batch_pgd(model, total, samples, labels, distance, iterations, scaler, mins, maxs, mutable_idx, eq_min_max_idx):
     """
