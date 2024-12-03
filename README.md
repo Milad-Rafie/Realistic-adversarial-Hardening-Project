@@ -10,14 +10,6 @@ The paper studies 3 use cases (text, botnet, malware) and at least one realistic
 All the data used for the results analysis can be downloaded in this [link](https://uniluxembourg-my.sharepoint.com/:f:/g/personal/salijona_dyrmishi_uni_lu/Eo3LPuU7nVJBs5UyHEBadU8BkOOJHnCFXdGE55dNbCETow?e=YTyCXn). 
 
 
-### 1. Text classification
-We consider two attacks: [Deepwordbug](https://arxiv.org/abs/1801.04354)(unrealistic) and [TextFooler](https://arxiv.org/abs/1907.11932)(realistic).
-
-We use [Textattack](https://textattack.readthedocs.io/en/latest/) library from the command line to train the models and evaluate their adversarial robustness. 
-You will find all the models presented in the paper in this [link](https://uniluxembourg-my.sharepoint.com/:u:/g/personal/salijona_dyrmishi_uni_lu/EShqUwlR76xNttj4_BPuOU0BrY854BrNlkm84adN3wRpqQ?e=rrncfb).
-In the config files of each model you can see the training parameters, including the attack used for the hardening. This [file](https://uniluxembourg-my.sharepoint.com/:x:/g/personal/salijona_dyrmishi_uni_lu/ES71tvRvV1pBl9thHzz0AA8BpVDzoTXv4yVMURyQuVs9uw?e=ct4uwh)
-provides an easy way to identify the models. 
-
 
 ### 2. Botnet detection
 As an unrealistic attack we use the PGD implementation of [ART](https://adversarial-robustness-toolbox.readthedocs.io/en/latest/) library. <br>
