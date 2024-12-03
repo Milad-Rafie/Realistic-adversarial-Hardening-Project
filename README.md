@@ -3,7 +3,7 @@
 # Realistic adversarial hardening
 This repository contains the data and the code used for S&amp;P 2023 paper <em>[On The Empirical Effectiveness of Unrealistic Adversarial Hardening Against Realistic Adversarial Attacks](https://arxiv.org/abs/2202.03277)</em>. 
 The paper investigates whether "cheap" unrealistic adversarial attacks can be used to harden ML models against computationally expensive realistic attacks. 
-The paper studies 3 use cases (text, botnet, malware) and at least one realistic and unrealistic attack for each of them. 
+The paper studies 3 use cases (text, botnet, malware) and at least one realistic and unrealistic attack for each of them. However, for the sake of this project, i'm focusing only on Botnet section and its data.
 
 
 ### Downloading the data
