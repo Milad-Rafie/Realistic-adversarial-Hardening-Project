@@ -1,115 +1,132 @@
+import sys
 import os
+import random as rn
 import json
 import numpy as np
 import tensorflow as tf
-from helpers import create_DNN, get_train_data, get_model_data, get_processing_data, save_model_and_history
-from datagen import generate_adversarial_batch_pgd, generate_adversarial_batch_fence
+import pickle
+from datagen import generate_adversarial_batch_pgd
+from helpers import create_DNN, save_metrics, save_adv_candidates, get_train_data, get_model_data, get_processing_data
+from attack.pgd.pgd_attack_art import PgdRandomRestart
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, confusion_matrix
 
-def load_mutable_idx(config):
-    mutable_idx = config.get("mutable_idx", None)
-    if not mutable_idx:
-        raise ValueError("The 'mutable_idx' is not specified in the configuration file.")
+import warnings
+warnings.filterwarnings('ignore')
 
-    if not os.path.exists(mutable_idx):
-        raise FileNotFoundError(f"The file 'mutable_idx.npy' does not exist at {mutable_idx}. Please check the path.")
 
-    print(f"[INFO] Loading mutable_idx from: {mutable_idx}")
-    mutable_idx = np.load(mutable_idx)
-    print("[INFO] Successfully loaded mutable_idx.")
-    return mutable_idx
+def evaluate_model(model, x_test, y_test_onehot, attack_generator=None):
+    # Convert one-hot back to integer labels
+    y_true = np.argmax(y_test_onehot, axis=1)
+    # Clean evaluation
+    proba = model.predict(x_test)
+    y_pred = np.argmax(proba, axis=1)
+    acc = accuracy_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred)
+    try:
+        auc = roc_auc_score(y_true, proba[:, 1])
+    except Exception:
+        auc = None
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    print("\n=== Clean Test Performance ===")
+    print(f"Accuracy: {acc:.4f}, F1: {f1:.4f}, ROC-AUC: {auc if auc is not None else 'n/a'}")
+    print(f"FPR: {fp/(fp+tn):.4f}, FNR: {fn/(fn+tp):.4f}")
 
-def load_eq_min_max_idx():
-    eq_min_max_idx = "/Users/milo/Downloads/realistic_adversarial_hardening-main/data/neris/eq_min_max_idx.npy"
-    if not os.path.exists(eq_min_max_idx):
-        raise FileNotFoundError(f"The file 'eq_min_max_idx.npy' does not exist at {eq_min_max_idx}. Please check the path.")
+    # Adversarial evaluation
+    if attack_generator is not None:
+        # Prepare integer labels for attack
+        y_int = y_true.reshape(-1, 1)
+        adv_x = attack_generator.run_attack(x_test, y_int)
+        proba_adv = model.predict(adv_x)
+        y_adv_pred = np.argmax(proba_adv, axis=1)
+        acc_adv = accuracy_score(y_true, y_adv_pred)
+        f1_adv = f1_score(y_true, y_adv_pred)
+        try:
+            auc_adv = roc_auc_score(y_true, proba_adv[:, 1])
+        except Exception:
+            auc_adv = None
+        tn, fp, fn, tp = confusion_matrix(y_true, y_adv_pred).ravel()
+        print("\n=== Adversarial Test Performance ===")
+        print(f"Accuracy: {acc_adv:.4f}, F1: {f1_adv:.4f}, ROC-AUC: {auc_adv if auc_adv is not None else 'n/a'}")
+        print(f"FPR: {fp/(fp+tn):.4f}, FNR: {fn/(fn+tp):.4f}")
+    else:
+        print("No adversarial evaluation performed.")
+    print("\n")
 
-    print(f"[INFO] Loading eq_min_max_idx from: {eq_min_max_idx}")
-    eq_min_max_idx = np.load(eq_min_max_idx)
-    print("[INFO] Successfully loaded eq_min_max_idx.")
-    return eq_min_max_idx
 
-def train(config, method="clean", distance=12, save_data=True):
-    # Load data
+def train(config, method='clean', callback=None, distance=12, save_data=True):
     x_train, y_train, x_test, y_test = get_train_data(config)
     LAYERS, INPUT_DIM, LR = get_model_data(config)
-    scaler, min_features, max_features = get_processing_data(config)
-
-    print(f"[DEBUG] x_train shape: {x_train.shape}")
-    print(f"[DEBUG] x_test shape: {x_test.shape}")
-
-    y_train = tf.keras.utils.to_categorical(y_train, num_classes=2)
-    y_test = tf.keras.utils.to_categorical(y_test, num_classes=2)
+    scaler, min_features, max_features, mask_idx, eq_min_max = get_processing_data(config)
+    iterations = config["iterations"]
     epochs = config["epochs"]
-    batch_size = 512
-    steps_per_epoch = len(x_train) // batch_size
 
     for lrate in LR:
-        model = create_DNN(units=LAYERS, input_dim_param=INPUT_DIM, lr_param=lrate)
-        print(f"[INFO] Training model with learning rate: {lrate}...")
+        nn = create_DNN(units=LAYERS, input_dim_param=INPUT_DIM, lr_param=lrate)
 
         if method == "clean":
-            print(f"[INFO] Training clean model...")
-            history_obj = model.fit(x_train, y_train, verbose=1, epochs=epochs, batch_size=batch_size, shuffle=True)
-
+            history_obj = nn.fit(x_train, y_train, verbose=1, epochs=epochs, batch_size=64, shuffle=True)
         elif method == "pgd":
-            print("[INFO] Generating PGD adversarial examples...")
-            try:
-                mutable_idx = load_mutable_idx(config)
-                eq_min_max_idx = load_eq_min_max_idx()
+            dataGen = generate_adversarial_batch_pgd(
+                nn, 64, x_train, y_train,
+                distance, iterations,
+                scaler, min_features, max_features,
+                mask_idx, eq_min_max
+            )
+            history_obj = nn.fit(
+                dataGen,
+                steps_per_epoch=(len(x_train) // 2) // 64,
+                verbose=1,
+                epochs=epochs,
+                callbacks=callback
+            )
+        else:
+            # fence or other methods
+            history_obj = None
 
-                dataGen = generate_adversarial_batch_pgd(
-                    model,
-                    total=batch_size,
-                    samples=x_train,
-                    labels=y_train,
-                    distance=distance,
-                    iterations=config["iterations"],
-                    scaler=scaler,
-                    mins=min_features,
-                    maxs=max_features,
-                    mutable_idx=mutable_idx,
-                    eq_min_max_idx=eq_min_max_idx
-                )
-                history_obj = model.fit(dataGen, steps_per_epoch=steps_per_epoch, verbose=1, epochs=epochs)
-            except Exception as e:
-                print(f"[ERROR] Error during PGD training: {e}")
-                continue
+        if save_data and history_obj is not None:
+            # Save model
+            model_path = config["path_to_save"] + f"/{method}_model.h5"
+            nn.save(model_path)
 
-        if method == "fence":
-            print("[INFO] Generating FENCE adversarial examples...")
-            try:
-                dataGen = generate_adversarial_batch_fence(
-                    model=model,
-                    total=batch_size,
-                    samples=x_train,
-                    labels=y_train,
-                    distance=distance,
-                    iterations=config["iterations"],
-                    scaler=scaler,
-                    mins=min_features,
-                    maxs=max_features,
-                    model_path=config["intermediate_model_path"],
-                )
-                history_obj = model.fit(dataGen, steps_per_epoch=steps_per_epoch, verbose=1, epochs=epochs)
-            except Exception as e:
-                print(f"[ERROR] Error during FENCE training: {e}")
-                continue
+            # Save history
+            history_path = config["path_to_save"] + f"/{method}_history.npy"
+            with open(history_path, 'wb') as f:
+                pickle.dump(history_obj.history, f)
 
-        if save_data:
-            save_model_and_history(config, model, history_obj, method)
+            # Evaluate
+            # Instantiate attack generator for adversarial evaluation
+            attack_gen = PgdRandomRestart(
+                model=nn,
+                eps=distance,
+                alpha=1,
+                num_iter=iterations,
+                restarts=5,
+                scaler=scaler,
+                mins=min_features,
+                maxs=max_features,
+                mutable_idx=mask_idx,
+                eq_min_max_idx=eq_min_max
+            )
+            evaluate_model(nn, x_test, y_test, attack_generator=attack_gen)
+
+
+def train_save_epochs(config_file, attack):
+    with open(config_file) as f:
+        config = json.load(f)
+    distances = config["distances"]
+    for dis in distances:
+        cp_path = config["path_to_save"] + f"/distance_{dis}/model-{{epoch:04d}}.h5"
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(
+            filepath=cp_path,
+            save_freq='epoch',
+            save_weights_only=False,
+            save_best_only=False,
+            verbose=1
+        )
+        train(config, method=attack, callback=cp_callback, distance=int(dis), save_data=True)
+
 
 if __name__ == "__main__":
     config_file = "config/neris.json"
-    with open(config_file, "r") as f:
-        config = json.load(f)
-
-    attack_methods = config["attack_methods"]
-    for method in attack_methods:
-        print(f"[INFO] Training with method: {method}...")
-        distances = config["distances"]
-        for distance in distances:
-            print(f"[INFO] Training with distance: {distance}...")
-            try:
-                train(config, method=method, distance=int(distance), save_data=True)
-            except Exception as e:
-                print(f"[ERROR] Error during training with method {method} and distance {distance}: {e}")
+    attack = "pgd"
+    train_save_epochs(config_file, attack)
