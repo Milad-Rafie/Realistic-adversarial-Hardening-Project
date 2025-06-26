@@ -1,143 +1,118 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 import sys
-sys.path.append('..')
-import joblib
+import pathlib
+BOTNET_ROOT = pathlib.Path(__file__).parent.parent.resolve()   # .../src/botnet
+DATA_ROOT    = BOTNET_ROOT.parent / "data"                     # .../src/data
+
+sys.path.insert(0, str(BOTNET_ROOT))
+
+import time
 from datetime import datetime
+
+import joblib
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.models import load_model
+
 from fence.neris_attack_tf2 import Neris_attack
-from pgd.pgd_attack_art import PgdRandomRestart
-from training.helpers import read_min_max
-from tensorflow.random import set_seed
-from tensorflow.keras.losses import BinaryCrossentropy
-import json
+from pgd.pgd_attack_art       import PgdRandomRestart
+from training.helpers         import get_processing_data
 
-# Helper to load mutable indices
-def load_mutable_idx(path):
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"The file '{path}' does not exist. Please check the path.")
-    print(f"[INFO] Loading mutable_idx from: {path}")
-    return np.load(path)
+import warnings
+warnings.filterwarnings("ignore")
 
-# Helper to evaluate success rate
-def evaluate_success_rate(model, perturbSamples, y_test):
-    probas = np.squeeze(model.predict(perturbSamples))
-    predictions = np.argmax(probas, axis=1)
-    adv_success = predictions != np.argmax(y_test, axis=1)  # Success if prediction changes
-    success_rate = np.mean(adv_success) * 100
-    return success_rate
 
-# Main attack function
-def attack(config, method="clean", distance=12):
-    print("[INFO] Loading test samples and labels...")
-    samples = np.load(config["x_test"])
-    labels = np.load(config["y_test"])
-    labels = np.squeeze(labels)
-    print(f"[DEBUG] Samples shape: {samples.shape}, Labels shape: {labels.shape}")
+def attack(
+    method: str,
+    model_path: str,
+    samples_path: str,
+    labels_path: str,
+    distance: float,
+    iterations: int,
+    only_botnet: bool = True
+):
+    # 1) Load raw samples & labels
+    X = np.load(samples_path)
+    y = np.load(labels_path)
+    if only_botnet:
+        idx = np.where(y == 1)[0]
+        X = X[idx]
+        y = y[idx]
 
-    if config.get("only_botnet", True):
-        idx = np.where(labels == 1)[0]
-        samples = samples[idx]
-        labels = labels[idx]
-        print(f"[DEBUG] Filtered botnet samples shape: {samples.shape}, Labels shape: {labels.shape}")
+    # 2) Load model (no compile to avoid legacy‐h5 issues)
+    model = load_model(model_path, compile=False)
 
-    labels_one_hot = tf.keras.utils.to_categorical(labels, num_classes=2)
-    print(f"[DEBUG] One-hot encoded labels shape: {labels_one_hot.shape}")
+    # 3) Load scaler & feature‐bounds from data root
+    scaler, mins, maxs, mask_idx, eq_min_max = get_processing_data({
+        "scaler_path":    str(DATA_ROOT / "neris" / "scaler.pkl"),
+        "min_features":   str(DATA_ROOT / "neris" / "minimum.txt"),
+        "max_features":   str(DATA_ROOT / "neris" / "maximum.txt"),
+        "mask_idx":       str(DATA_ROOT / "neris" / "mutable_idx.npy"),
+        "eq_min_max_idx": str(DATA_ROOT / "neris" / "eq_min_max_idx.npy"),
+    })
 
-    print(f"[INFO] Loading model from {config['intermediate_model_path']}...")
-    try:
-        model = tf.keras.models.load_model(config["intermediate_model_path"])
-        print("[INFO] Model loaded successfully.")
-    except Exception as e:
-        print(f"[ERROR] Error loading model: {e}")
-        return None, None
-
-    perturbSamples = None
-    success_rate = 0
-
-    if method == "clean":
-        print(f"[INFO] Running clean evaluation...")
-        perturbSamples = samples
-        success_rate = evaluate_success_rate(model, perturbSamples, labels_one_hot)
-
-    elif method == "pgd":
-        print(f"[INFO] Generating PGD adversarial examples...")
-        mutable_idx = load_mutable_idx(config["mutable_idx"])
-        eq_min_max_idx = load_mutable_idx(config["eq_min_max_idx"])
-        scaler = joblib.load(config["scaler_path"])
-        min_features, max_features = read_min_max(config["min_features"], config["max_features"])
-        attack_generator = PgdRandomRestart(
+    method = method.lower()
+    if method == "pgd":
+        y_scalar = y.reshape(-1, 1)
+        pgd_gen = PgdRandomRestart(
             model=model,
             eps=distance,
             alpha=1,
-            num_iter=config["iterations"],
+            num_iter=iterations,
             restarts=5,
             scaler=scaler,
-            mins=min_features,
-            maxs=max_features,
-            mutable_idx=mutable_idx,
-            eq_min_max_idx=eq_min_max_idx
+            mins=mins,
+            maxs=maxs,
+            mutable_idx=mask_idx,
+            eq_min_max_idx=eq_min_max,
         )
-        try:
-            perturbSamples = attack_generator.run_attack(samples, labels_one_hot)
-            success_rate = evaluate_success_rate(model, perturbSamples, labels_one_hot)
-        except Exception as e:
-            print(f"[ERROR] Error during PGD attack: {e}")
+        X_adv = pgd_gen.run_attack(X, y_scalar)
 
-    elif method == "fence":
-        print(f"[INFO] Generating FENCE adversarial examples...")
-        scaler = joblib.load(config["scaler_path"])
-        min_features, max_features = read_min_max(config["min_features"], config["max_features"])
-        attack_generator = Neris_attack(
-            model_path=config["intermediate_model_path"],
-            iterations=config["iterations"],
+    elif method == "neris":
+        neris_gen = Neris_attack(
+            model_path=str(model_path),
+            iterations=iterations,
             distance=distance,
             scaler=scaler,
-            mins=min_features,
-            maxs=max_features
+            mins=mins,
+            maxs=maxs,
         )
-        perturbSamples = []
-        try:
-            for i in range(samples.shape[0]):
-                if i % 100 == 0:
-                    print(f"[INFO] Processing sample {i}/{samples.shape[0]}...")
-                sample = np.expand_dims(samples[i], axis=0)
-                label = labels[i]
-                adversary = attack_generator.run_attack(sample, label)
-                perturbSamples.append(adversary)
-            perturbSamples = np.squeeze(np.array(perturbSamples))
-            success_rate = evaluate_success_rate(model, perturbSamples, labels_one_hot)
-        except Exception as e:
-            print(f"[ERROR] Error during FENCE attack: {e}")
-    else:
-        print(f"[ERROR] Unsupported attack method: {method}")
+        adv_list = []
+        for i, (x0, y0) in enumerate(zip(X, y)):
+            if i % 1000 == 0:
+                print(f"[NERIS] attacking sample {i}/{len(X)}")
+            x0 = x0.reshape(1, -1)
+            adv = neris_gen.run_attack(x0, int(y0))
+            adv_list.append(adv)
+        X_adv = np.vstack(adv_list)
 
-    print(f"[INFO] {method.upper()} attack success rate: {success_rate:.2f}%")
-    return perturbSamples, success_rate
+    else:
+        raise ValueError(f"Unknown attack method: {method}")
+
+    # 4) Compute success rate: how often a true‐1 is flipped to 0
+    probs = model.predict(X_adv).squeeze()
+    preds = (probs >= 0.5).astype(int)
+    success_rate = 100 * np.mean(preds == 0)
+
+    return X_adv, success_rate
+
 
 if __name__ == "__main__":
-    config_file = "../config/neris.json"
-    with open(config_file, "r") as f:
-        config = json.load(f)
+    MODEL_PATH   = BOTNET_ROOT / "out" / "neris" / "clean_10epochs" / "clean_model.h5"
+    SAMPLES_PATH = DATA_ROOT   / "neris" / "testing_samples.npy"
+    LABELS_PATH  = DATA_ROOT   / "neris" / "testing_labels.npy"
 
-    # Set random seeds for reproducibility
-    np.random.seed(500)
-    set_seed(500)
-
-    start_time = datetime.now()
-    attack_methods = config["attack_methods"]
-    distances = [int(d) for d in config["distances"]]
-
-    for method in attack_methods:
-        for distance in distances:
-            print(f"\n[INFO] Running {method.upper()} attack with distance {distance}...")
-            try:
-                perturbed_samples, success_rate = attack(config, method=method, distance=distance)
-                if perturbed_samples is not None:
-                    print(f"[RESULT] Success rate for {method.upper()} with distance {distance}: {success_rate:.2f}%")
-            except Exception as e:
-                print(f"[ERROR] Error during {method.upper()} attack with distance {distance}: {e}")
-
-    end_time = datetime.now()
-    print(f"Total Duration: {end_time - start_time}")
+    for m in ("pgd", "neris"):
+        t0 = datetime.now()
+        X_adv, sr = attack(
+            method=str(m),
+            model_path=str(MODEL_PATH),
+            samples_path=str(SAMPLES_PATH),
+            labels_path=str(LABELS_PATH),
+            distance=12,
+            iterations=100,
+        )
+        print(f"\n{m.upper()} → generated {X_adv.shape[0]} adversarials in {datetime.now()-t0}")
+        print(f"{m.upper()} success rate: {sr:.2f}%\n")
