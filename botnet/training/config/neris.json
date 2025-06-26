@@ -1,7 +1,7 @@
 {
   "distances": [ "12" ],
   "iterations": 3,
-  "epochs": 2,
+  "epochs": 5,
   "path_to_save": "../out/datasets/neris/fence_10epochs",
   "LAYERS": [ 256, 128, 64 ],
   "INPUT_DIM": 756,
